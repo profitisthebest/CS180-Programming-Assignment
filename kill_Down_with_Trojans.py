@@ -30,13 +30,14 @@ def print_tile_data(tile_types, tile_values):
     print(tile_values)
 
 
+# approach: at each tile -> in memo store the min hp required to reach end from curr
 def gridTraveler(n, i, j, tile_types, tile_values, protect_token, mult_token, memo):
+    # memo key
     key = (i, j, protect_token, mult_token)
 
     # check memo
     if key in memo:
         return memo[key]
-    
     
     # base case
     if i == n-1 and j == n-1:
@@ -46,45 +47,51 @@ def gridTraveler(n, i, j, tile_types, tile_values, protect_token, mult_token, me
             memo[key] = tile_values[i][j] if tile_types[i][j] == DMG else 0
         return memo[key]
 
-    # edge
-    if i == n-1:
-        memo[key] = min_to_next_tile(n, i, j+1, tile_types, tile_values, tile_types[i][j], tile_values[i][j], protect_token, mult_token, memo)
-    elif j == n-1:
-        memo[key] = min_to_next_tile(n, i+1, j, tile_types, tile_values, tile_types[i][j], tile_values[i][j], protect_token, mult_token, memo)
-    else:
-        right_move = min_to_next_tile(n, i, j+1, tile_types, tile_values, tile_types[i][j], tile_values[i][j], protect_token, mult_token, memo)
-        down_move = min_to_next_tile(n, i+1, j, tile_types, tile_values, tile_types[i][j], tile_values[i][j], protect_token, mult_token, memo)
-        memo[key] = min(right_move, down_move)
+    # out of bounds
+    if i >= n or j >= n:
+        return float('inf')
+    
+    # if healing tile, val should subtract
+    if tile_types[i][j] == HEALING and tile_values[i][j] > 0:
+        tile_values[i][j] *= -1
+    
+    # CASES: DMG, HEALING, PROTECTION, MULTIPLIER
+    res = 0
+    if tile_types[i][j] == DMG:
+        if protect_token: # have protection token
+            use_token_right = gridTraveler(n, i, j+1, tile_types, tile_values, 0, mult_token, memo)
+            keep_token_right = gridTraveler(n, i, j+1, tile_types, tile_values, 1, mult_token, memo) + tile_values[i][j] # account for curr dmg
+            use_token_down = gridTraveler(n, i+1, j, tile_types, tile_values, 0, mult_token, memo)
+            keep_token_down = gridTraveler(n, i+1, j, tile_types, tile_values, 1, mult_token, memo) + tile_values[i][j]
 
+            res = min(use_token_right, keep_token_right, use_token_down, keep_token_down) # take min of all possible moves
+        else: # no protection token
+            right = gridTraveler(n, i, j+1, tile_types, tile_values, 0, mult_token, memo) + tile_values[i][j]
+            down = gridTraveler(n, i+1, j, tile_types, tile_values, 0, mult_token, memo) + tile_values[i][j]
+            res = min(right, down)
+    elif tile_types[i][j] == HEALING:
+        if mult_token: # have multiplier token
+            use_token_right = gridTraveler(n, i, j+1, tile_types, tile_values, protect_token, 0, memo) + 2*tile_values[i][j]
+            keep_token_right = gridTraveler(n, i, j+1, tile_types, tile_values, protect_token, 1, memo) + tile_values[i][j]
+            use_token_down = gridTraveler(n, i+1, j, tile_types, tile_values, protect_token, 0, memo) + 2*tile_values[i][j]
+            keep_token_down = gridTraveler(n, i+1, j, tile_types, tile_values, protect_token, 1, memo) + tile_values[i][j]
+
+            res = min(use_token_right, keep_token_right, use_token_down, keep_token_down)
+        else: # no multiplier token
+            right = gridTraveler(n, i, j+1, tile_types, tile_values, protect_token, 0, memo) + tile_values[i][j]
+            down = gridTraveler(n, i+1, j, tile_types, tile_values, protect_token, 0, memo) + tile_values[i][j]
+            res = min(right, down)
+    elif tile_types[i][j] == PROTECTION:
+        right = gridTraveler(n, i, j+1, tile_types, tile_values, 1, mult_token, memo)
+        down = gridTraveler(n, i+1, j, tile_types, tile_values, 1, mult_token, memo)
+        res = min(right, down)
+    else: # MULT
+        right = gridTraveler(n, i, j+1, tile_types, tile_values, protect_token, 1, memo)
+        down = gridTraveler(n, i+1, j, tile_types, tile_values, protect_token, 1, memo)
+        res = min(right, down)
+    
+    memo[key] = max(res, 0)
     return memo[key]
-
-
-def min_to_next_tile(n, next_i, next_j, tile_types, tile_values, last_tile_type, last_tile_value, protect_token, mult_token, memo):
-    if last_tile_type == HEALING:
-        last_tile_value *= -1 # make it negative - reduces hp needed because we heal
-    
-    if (next_i, next_j, protect_token, mult_token) in memo:
-        return memo[(next_i, next_j, protect_token, mult_token)]
-    
-    result = 0
-    if mult_token and last_tile_type == HEALING:
-        use_token = 2*last_tile_value + gridTraveler(n, next_i, next_j, tile_types, tile_values, protect_token, 0, memo)
-        not_use_token = last_tile_value + gridTraveler(n, next_i, next_j, tile_types, tile_values, protect_token, 1, memo)
-        result = min(use_token, not_use_token)
-    elif protect_token and last_tile_type == DMG:
-        use_token = gridTraveler(n, next_i, next_j, tile_types, tile_values, 0, mult_token, memo)  # no damage
-        not_use_token = last_tile_value + gridTraveler(n, next_i, next_j, tile_types, tile_values, 1, mult_token, memo)
-        result = min(use_token, not_use_token)
-    else:
-        if last_tile_type == MULTIPLIER:
-            result = gridTraveler(n, next_i, next_j, tile_types, tile_values, protect_token, 1, memo)
-        elif last_tile_type == PROTECTION:
-            result = gridTraveler(n, next_i, next_j, tile_types, tile_values, 1, mult_token, memo)
-        else:
-            result = last_tile_value + gridTraveler(n, next_i, next_j, tile_types, tile_values, protect_token, mult_token, memo)
-    
-    memo[(next_i, next_j, protect_token, mult_token)] = result
-    return result
 
 
 def DP(n, H, tile_types, tile_values):
@@ -95,7 +102,6 @@ def DP(n, H, tile_types, tile_values):
     required_h = gridTraveler(n, 0, 0, tile_types, tile_values, 0, 0, memo)
 
     return H >= required_h
-
 
 
 def write_output_file(output_file_name, result):
